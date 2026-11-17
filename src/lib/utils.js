@@ -95,3 +95,13 @@ export const nomeArquivo = (s) =>
   normalizar(s).replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').toUpperCase() || 'SEM_NOME'
 
 export const cx = (...c) => c.filter(Boolean).join(' ')
+
+// ---------- Login por usuário (sem e-mail) ----------
+// O Supabase exige e-mail; usuários sem e-mail ganham um e-mail interno neste domínio.
+export const DOMINIO_LOGIN = 'pcd.efcsys.com'
+export const normalizarUsuario = (u) => normalizar(u).replace(/[^a-z0-9._-]/g, '')
+export const loginParaEmail = (login) => {
+  const l = (login || '').trim().toLowerCase()
+  return l.includes('@') ? l : `${normalizarUsuario(l)}@${DOMINIO_LOGIN}`
+}
+export const nomeDeLogin = (email) => (email || '').endsWith('@' + DOMINIO_LOGIN) ? email.split('@')[0] : email
