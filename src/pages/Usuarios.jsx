@@ -3,6 +3,7 @@ import { UserCog, Plus, KeyRound, Pencil, Trash2 } from 'lucide-react'
 import { useApp } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { Badge, Botao, Card, Campo, Confirmar, Modal, Selecao, Titulo, Vazio } from '../components/ui'
+import { loginParaEmail, nomeDeLogin, normalizarUsuario } from '../lib/utils'
 
 const PERFIS = { admin: 'Administrador', user: 'Usuário', leitor: 'Leitor' }
 
@@ -21,7 +22,7 @@ function FormUsuario({ usuario, onFechar, onSalvo }) {
   const { isAdmin, avisar } = useApp()
   const novo = !usuario
   const [f, setF] = useState(() => ({
-    nome: '', email: '', password: '', role: 'user', acesso_conferidos: true, acesso_abada: true, ativo: true, ...(usuario || {}),
+    nome: '', usuario: '', password: '', role: 'user', acesso_conferidos: true, acesso_abada: true, ativo: true, ...(usuario || {}),
   }))
   const [ok, setOk] = useState(false)
 
@@ -29,7 +30,10 @@ function FormUsuario({ usuario, onFechar, onSalvo }) {
     e.preventDefault()
     setOk(true)
     try {
-      if (novo) await chamar({ action: 'create', ...f, email: f.email.trim() })
+      if (novo) {
+        if (!f.usuario.trim()) throw new Error('Informe o usuário')
+        await chamar({ action: 'create', ...f, email: loginParaEmail(f.usuario) })
+      }
       else await chamar({ action: 'update', id: usuario.id, nome: f.nome, role: f.role, acesso_conferidos: f.acesso_conferidos, acesso_abada: f.acesso_abada, ativo: f.ativo })
       avisar(novo ? 'Usuário criado! Ele vai trocar a senha no primeiro acesso.' : 'Usuário atualizado')
       onSalvo()
@@ -42,7 +46,9 @@ function FormUsuario({ usuario, onFechar, onSalvo }) {
       <Campo label="Nome" value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} />
       {novo && (
         <>
-          <Campo label="E-mail" obrigatorio type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+          <Campo label="Usuário (login)" obrigatorio value={f.usuario} autoCapitalize="none" autoCorrect="off" spellCheck={false}
+            placeholder="ex.: porta1 ou joao.silva"
+            onChange={(e) => setF({ ...f, usuario: e.target.value.includes('@') ? e.target.value.trim() : normalizarUsuario(e.target.value) })} />
           <Campo label="Senha provisória" obrigatorio type="text" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
         </>
       )}
@@ -95,7 +101,7 @@ export default function Usuarios() {
         {lista.map((u) => (
           <div key={u.id} className="flex items-center gap-3 p-4">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-purple-600 to-pink-500 font-bold text-white">
-              {(u.nome || u.email || '?').trim()[0]?.toUpperCase()}
+              {(u.nome || nomeDeLogin(u.email) || '?').trim()[0]?.toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -104,7 +110,7 @@ export default function Usuarios() {
                 {!u.ativo && <Badge cor="vermelho">Desativado</Badge>}
                 {u.id === profile.id && <Badge cor="verde">Você</Badge>}
               </div>
-              <div className="truncate text-xs text-gray-500">{u.email}</div>
+              <div className="truncate text-xs text-gray-500">{nomeDeLogin(u.email)}</div>
               {u.role === 'leitor' && (
                 <div className="text-xs text-gray-400">{[u.acesso_conferidos && 'Conferidos', u.acesso_abada && 'Abadá'].filter(Boolean).join(' · ') || 'Sem telas'}</div>
               )}
@@ -126,7 +132,7 @@ export default function Usuarios() {
         {form && <FormUsuario key={form.id || 'novo'} usuario={form === 'novo' ? null : form} onFechar={() => setForm(null)} onSalvo={carregar} />}
       </Modal>
 
-      <Modal aberto={!!senha} onFechar={() => setSenha(null)} titulo={`Redefinir senha — ${senha?.nome || senha?.email || ''}`} largura="max-w-md">
+      <Modal aberto={!!senha} onFechar={() => setSenha(null)} titulo={`Redefinir senha — ${senha?.nome || nomeDeLogin(senha?.email) || ''}`} largura="max-w-md">
         <form className="space-y-4" onSubmit={async (e) => {
           e.preventDefault()
           try { await chamar({ action: 'reset_password', id: senha.id, password: novaSenha }); avisar('Senha redefinida. Ele vai trocar no próximo acesso.'); setSenha(null) }
@@ -138,7 +144,7 @@ export default function Usuarios() {
       </Modal>
 
       <Confirmar aberto={!!apagar} titulo="Excluir usuário" textoSim="Excluir"
-        texto={`Excluir a conta de ${apagar?.nome || apagar?.email}? Para só bloquear o acesso, prefira desativar.`}
+        texto={`Excluir a conta de ${apagar?.nome || nomeDeLogin(apagar?.email)}? Para só bloquear o acesso, prefira desativar.`}
         onNao={() => setApagar(null)}
         onSim={async () => {
           try { await chamar({ action: 'delete', id: apagar.id }); avisar('Usuário excluído'); carregar() } catch (err) { avisar(err.message, 'erro') }
