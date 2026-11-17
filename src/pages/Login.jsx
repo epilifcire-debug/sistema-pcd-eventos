@@ -2,24 +2,25 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../lib/store'
 import { Botao, Card, Campo } from '../components/ui'
+import { loginParaEmail } from '../lib/utils'
 
 export default function Login() {
   const { avisar } = useApp()
-  const [email, setEmail] = useState('')
+  const [login, setLogin] = useState('')
   const [senha, setSenha] = useState('')
   const [ok, setOk] = useState(false)
 
   async function entrar(e) {
     e.preventDefault()
     setOk(true)
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha })
+    const { error } = await supabase.auth.signInWithPassword({ email: loginParaEmail(login), password: senha })
     setOk(false)
-    if (error) avisar(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos' : error.message, 'erro')
+    if (error) avisar(error.message === 'Invalid login credentials' ? 'Usuário ou senha incorretos' : error.message, 'erro')
   }
 
   async function esqueci() {
-    if (!email) return avisar('Digite seu e-mail primeiro', 'erro')
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.href.split('#')[0] })
+    if (!login.includes('@')) return avisar('Peça a um administrador para redefinir sua senha na tela Usuários.')
+    const { error } = await supabase.auth.resetPasswordForEmail(login.trim(), { redirectTo: window.location.href.split('#')[0] })
     avisar(error ? error.message : 'Se o e-mail existir, você vai receber um link para redefinir a senha.', error ? 'erro' : 'ok')
   }
 
@@ -32,9 +33,9 @@ export default function Login() {
           <img src="./logos/precaju.png" alt="" className="h-14 w-20 object-contain" />
         </div>
         <h1 className="mb-1 text-center text-xl font-bold dark:text-white">Sistema PCD Eventos</h1>
-        <p className="mb-5 text-center text-sm text-gray-500">Entre com seu e-mail e senha</p>
+        <p className="mb-5 text-center text-sm text-gray-500">Entre com seu usuário e senha</p>
         <form onSubmit={entrar} className="space-y-3">
-          <Campo label="E-mail" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required />
+          <Campo label="Usuário" type="text" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} required />
           <Campo label="Senha" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} autoComplete="current-password" required />
           <Botao className="w-full" carregando={ok}>Entrar</Botao>
         </form>
