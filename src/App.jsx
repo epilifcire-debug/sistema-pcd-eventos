@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useApp } from './lib/store'
 import { supabase } from './lib/supabase'
-import { cx } from './lib/utils'
+import { cx, nomeDeLogin } from './lib/utils'
 import { Botao, Card, Campo } from './components/ui'
 import Login from './pages/Login'
 import Lista from './pages/Lista'
@@ -165,7 +165,7 @@ export default function App() {
       <header className="no-print text-white shadow-lg" style={{ background: 'linear-gradient(90deg,#8338ec,#ff006e,#ffbe0b)' }}>
         <div className="mx-auto max-w-6xl px-4 pt-[max(env(safe-area-inset-top),12px)] pb-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium opacity-90 truncate">Olá, {profile.nome || profile.email}</span>
+            <span className="text-sm font-medium opacity-90 truncate">Olá, {profile.nome || nomeDeLogin(profile.email)}</span>
             <div className="flex items-center gap-1">
               <button title="Atualizar dados" onClick={recarregar} className="rounded-lg bg-white/10 p-2 hover:bg-white/20">
                 <RefreshCw className={cx('h-4 w-4', carregando && 'animate-spin')} />
