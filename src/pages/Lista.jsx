@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react'
-import { Users, Search, Pencil, Trash2, Eye, FileText, Phone } from 'lucide-react'
+import { Users, Search, Pencil, Trash2, Eye, FileText, Phone, FolderOpen, HardDrive } from 'lucide-react'
 import { useApp } from '../lib/store'
-import { urlDocumento } from '../lib/supabase'
+import { abrirDocumento, linkPastaDrive } from '../lib/drive'
 import { normalizar, soDigitos, dataHora } from '../lib/utils'
 import { Badge, Botao, Card, Confirmar, Foto, Modal, Selecao, Titulo, Vazio, inputCls } from '../components/ui'
 import PessoaForm from '../components/PessoaForm'
 
 export default function Lista() {
-  const { pessoas, eventos, eventoPorId, eventosAtivosDaPessoa, inscPorPessoa, excluirPessoa, avisar } = useApp()
+  const { pessoas, eventos, eventoPorId, eventosAtivosDaPessoa, inscPorPessoa, excluirPessoa, avisar, isAdmin } = useApp()
   const [busca, setBusca] = useState('')
   const [evento, setEvento] = useState('')
   const [status, setStatus] = useState('')
@@ -117,13 +117,20 @@ export default function Lista() {
                 ))}
               </div>
             </div>
-            {(ver.documentos || []).length > 0 && (
+            {((ver.documentos || []).length > 0 || ver.drive_pasta_id) && (
               <div>
-                <div className="mb-1 text-xs text-gray-500">Documentos</div>
-                {ver.documentos.map((d) => (
-                  <button key={d.path} className="flex items-center gap-2 text-purple-600 hover:underline"
-                    onClick={async () => { const u = await urlDocumento(d.path); if (u) window.open(u, '_blank') }}>
-                    <FileText className="h-4 w-4" /> {d.nome}
+                <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
+                  <span>Documentos</span>
+                  {isAdmin && ver.drive_pasta_id && (
+                    <a href={linkPastaDrive(ver.drive_pasta_id)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-purple-600 hover:underline">
+                      <FolderOpen className="h-3 w-3" /> Pasta no Drive
+                    </a>
+                  )}
+                </div>
+                {(ver.documentos || []).map((d) => (
+                  <button key={d.drive_id || d.path} className="flex items-center gap-2 text-purple-600 hover:underline"
+                    onClick={() => abrirDocumento(d).catch((e) => avisar(e.message, 'erro'))}>
+                    <FileText className="h-4 w-4" /> {d.nome} {d.drive_id && <HardDrive className="h-3 w-3 text-gray-400" />}
                   </button>
                 ))}
               </div>

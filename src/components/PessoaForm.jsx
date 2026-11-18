@@ -1,19 +1,28 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Camera, ImagePlus, FileUp, Trash2, FileText, Save } from 'lucide-react'
+import { Camera, ImagePlus, FileUp, Trash2, FileText, Save, FolderOpen, HardDrive } from 'lucide-react'
 import { useApp } from '../lib/store'
-import { supabase, comprimirImagem, urlDocumento } from '../lib/supabase'
+import { supabase, comprimirImagem } from '../lib/supabase'
+import { enviarParaDrive, driveAcao, abrirDocumento, linkPastaDrive } from '../lib/drive'
 import { mascaraCPF, mascaraTelefone, cpfValido, soDigitos, dataBR, cx } from '../lib/utils'
 import { Botao, Campo, Foto, Selecao, inputCls } from './ui'
 
 const TIPOS = ['Física', 'Visual', 'Auditiva', 'Intelectual', 'TEA (Autismo)', 'Múltipla', 'Mobilidade reduzida']
 
+const chaveDoc = (d) => d.drive_id || d.path
+
+function nomeFotoDoc() {
+  const d = new Date()
+  const p = (n) => String(n).padStart(2, '0')
+  return `Documento_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.jpg`
+}
+
 const vazio = {
   nome: '', cpf: '', telefone: '', email: '', tipo_deficiencia: '', cid: '', status: 'ativo',
-  acompanhante: '', cpf_acompanhante: '', observacoes: '', foto_path: null, documentos: [],
+  acompanhante: '', cpf_acompanhante: '', observacoes: '', foto_path: null, documentos: [], drive_pasta_id: null,
 }
 
 export default function PessoaForm({ pessoa, onSalvo }) {
-  const { eventos, eventosDisponiveis, eventosAtivosDaPessoa, pessoas, salvarPessoa, avisar } = useApp()
+  const { eventos, eventosDisponiveis, eventosAtivosDaPessoa, pessoas, salvarPessoa, avisar, drive, isAdmin } = useApp()
   const editando = Boolean(pessoa?.id)
   const [f, setF] = useState(() => ({ ...vazio, ...(pessoa || {}) }))
   const [sel, setSel] = useState(() => (pessoa?.id ? eventosAtivosDaPessoa(pessoa.id) : []))
@@ -63,20 +72,42 @@ export default function PessoaForm({ pessoa, onSalvo }) {
         if (f.foto_path) await supabase.storage.from('fotos').remove([f.foto_path])
         foto_path = caminho
       }
-      let documentos = (f.documentos || []).filter((d) => !docsRemovidos.includes(d.path))
-      for (const file of novosDocs) {
-        const caminho = `${id}/${Date.now()}_${file.name.replace(/[^\w.-]+/g, '_')}`
-        const { error } = await supabase.storage.from('documentos').upload(caminho, file)
-        if (error) throw error
-        documentos.push({ nome: file.name, path: caminho })
+      // Documentos: Google Drive (se conectado) ou Supabase
+      let documentos = (f.documentos || []).filter((d) => !docsRemovidos.includes(chaveDoc(d)))
+      let drive_pasta_id = f.drive_pasta_id || null
+      if (novosDocs.length) {
+        const arquivos = []
+        for (const file of novosDocs) {
+          if (file.type.startsWith('image/')) {
+            const blob = await comprimirImagem(file, 2200, 0.85)
+            arquivos.push(new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }))
+          } else arquivos.push(file)
+        }
+        if (drive.conectado) {
+          const r = await enviarParaDrive({ id, nome: f.nome.trim(), cpf: f.cpf, drive_pasta_id }, arquivos)
+          drive_pasta_id = r.pasta_id
+          documentos.push(...r.arquivos.map((a) => ({ nome: a.nome, drive_id: a.drive_id, mime: a.mime })))
+        } else {
+          for (const file of arquivos) {
+            const caminho = `${id}/${Date.now()}_${file.name.replace(/[^\w.-]+/g, '_')}`
+            const { error } = await supabase.storage.from('documentos').upload(caminho, file)
+            if (error) throw error
+            documentos.push({ nome: file.name, path: caminho })
+          }
+        }
       }
-      if (docsRemovidos.length) await supabase.storage.from('documentos').remove(docsRemovidos)
+      const removidos = (f.documentos || []).filter((d) => docsRemovidos.includes(chaveDoc(d)))
+      const doSupabase = removidos.filter((d) => d.path).map((d) => d.path)
+      if (doSupabase.length) await supabase.storage.from('documentos').remove(doSupabase)
+      for (const d of removidos.filter((x) => x.drive_id)) {
+        await driveAcao({ action: 'remover', id: d.drive_id }).catch(() => {}) // vai para a lixeira do Drive
+      }
 
       const dados = {
         nome: f.nome.trim(), cpf: mascaraCPF(f.cpf), telefone: f.telefone || null, email: f.email?.trim() || null,
         tipo_deficiencia: f.tipo_deficiencia || null, cid: f.cid || null, status: f.status,
         acompanhante: f.acompanhante || null, cpf_acompanhante: f.cpf_acompanhante || null,
-        observacoes: f.observacoes || null, foto_path, documentos,
+        observacoes: f.observacoes || null, foto_path, documentos, drive_pasta_id,
       }
       await salvarPessoa({ ...dados, id }, sel, editando)
       avisar(editando ? 'Cadastro atualizado!' : 'Cadastro salvo!')
@@ -164,15 +195,28 @@ export default function PessoaForm({ pessoa, onSalvo }) {
 
       {/* Documentos */}
       <div>
-        <span className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">Documentos</span>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Documentos</span>
+          <div className="flex items-center gap-3 text-xs">
+            {drive.conectado
+              ? <span className="flex items-center gap-1 text-green-600"><HardDrive className="h-3 w-3" /> Salvos no Google Drive</span>
+              : <span className="text-gray-400">Salvos no sistema</span>}
+            {isAdmin && f.drive_pasta_id && (
+              <a href={linkPastaDrive(f.drive_pasta_id)} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-purple-600 hover:underline">
+                <FolderOpen className="h-3 w-3" /> Abrir pasta
+              </a>
+            )}
+          </div>
+        </div>
         <div className="space-y-2">
-          {(f.documentos || []).filter((d) => !docsRemovidos.includes(d.path)).map((d) => (
-            <div key={d.path} className="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm">
+          {(f.documentos || []).filter((d) => !docsRemovidos.includes(chaveDoc(d))).map((d) => (
+            <div key={chaveDoc(d)} className="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-900 px-3 py-2 text-sm">
               <button type="button" className="flex items-center gap-2 truncate text-purple-600 hover:underline"
-                onClick={async () => { const u = await urlDocumento(d.path); if (u) window.open(u, '_blank') }}>
+                onClick={() => abrirDocumento(d).catch((e) => avisar(e.message, 'erro'))}>
                 <FileText className="h-4 w-4 shrink-0" /> <span className="truncate">{d.nome}</span>
+                {d.drive_id && <HardDrive className="h-3 w-3 shrink-0 text-gray-400" />}
               </button>
-              <button type="button" onClick={() => setDocsRemovidos((r) => [...r, d.path])} className="text-red-500"><Trash2 className="h-4 w-4" /></button>
+              <button type="button" title="Remover" onClick={() => setDocsRemovidos((r) => [...r, chaveDoc(d)])} className="text-red-500"><Trash2 className="h-4 w-4" /></button>
             </div>
           ))}
           {novosDocs.map((file, i) => (
@@ -181,11 +225,23 @@ export default function PessoaForm({ pessoa, onSalvo }) {
               <button type="button" onClick={() => setNovosDocs((n) => n.filter((_, j) => j !== i))} className="text-red-500"><Trash2 className="h-4 w-4" /></button>
             </div>
           ))}
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700">
-            <FileUp className="h-4 w-4" /> Adicionar documento
-            <input type="file" multiple accept="image/*,application/pdf" className="hidden"
-              onChange={(e) => { setNovosDocs((n) => [...n, ...e.target.files]); e.target.value = '' }} />
-          </label>
+          <div className="flex flex-wrap gap-2">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700">
+              <Camera className="h-4 w-4" /> Fotografar documento
+              <input type="file" accept="image/*" capture="environment" className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ''
+                  if (file) setNovosDocs((n) => [...n, new File([file], nomeFotoDoc(), { type: file.type || 'image/jpeg' })])
+                }} />
+            </label>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700">
+              <FileUp className="h-4 w-4" /> Anexar arquivo
+              <input type="file" multiple accept="image/*,application/pdf" className="hidden"
+                onChange={(e) => { setNovosDocs((n) => [...n, ...e.target.files]); e.target.value = '' }} />
+            </label>
+          </div>
+          {novosDocs.length > 0 && <p className="text-xs text-gray-500">Os documentos novos são enviados ao salvar o cadastro.</p>}
         </div>
       </div>
 

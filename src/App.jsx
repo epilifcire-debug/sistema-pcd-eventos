@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Users, UserPlus, CalendarDays, Calendar, ClipboardCheck, Shirt, BarChart3, Database, Printer, UserCog,
-  LogOut, Sun, Moon, RefreshCw, CheckCircle2, AlertCircle,
+  LogOut, Sun, Moon, RefreshCw, CheckCircle2, AlertCircle, Settings,
 } from 'lucide-react'
 import { useApp } from './lib/store'
 import { supabase } from './lib/supabase'
@@ -17,6 +17,7 @@ import Relatorios from './pages/Relatorios'
 import BancoDeDados from './pages/BancoDeDados'
 import Impressao from './pages/Impressao'
 import Usuarios from './pages/Usuarios'
+import Configuracoes from './pages/Configuracoes'
 
 const PaginaConferidos = () => <Conferencia tipo="conferido" />
 const PaginaAbada = () => <Conferencia tipo="abada" />
@@ -32,6 +33,7 @@ const MENU = [
   { id: 'BancoDeDados', rotulo: 'Banco de Dados', icone: Database, pode: (a) => a.isAdmin },
   { id: 'Reports', rotulo: 'Impressão', icone: Printer, pode: (a) => a.isStaff },
   { id: 'Usuarios', rotulo: 'Usuários', icone: UserCog, pode: (a) => a.isStaff },
+  { id: 'Configuracoes', rotulo: 'Configurações', icone: Settings, pode: (a) => a.isAdmin },
 ]
 
 function useHash() {
@@ -157,7 +159,7 @@ export default function App() {
   const Pagina = {
     List: Lista, New: Novo, Calendar: Calendario, Events: Eventos,
     Conferidos: PaginaConferidos, RetiradaAbada: PaginaAbada,
-    Relatorios, BancoDeDados, Reports: Impressao, Usuarios,
+    Relatorios, BancoDeDados, Reports: Impressao, Usuarios, Configuracoes,
   }[atual?.id]
 
   return (

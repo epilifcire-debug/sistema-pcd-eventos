@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase, buscarTudo } from './supabase'
 import { hojeSP } from './utils'
+import { driveStatus } from './drive'
 
 const Ctx = createContext(null)
 export const useApp = () => useContext(Ctx)
@@ -18,6 +19,8 @@ export function AppProvider({ children }) {
   const [carregando, setCarregando] = useState(false)
   const [toast, setToast] = useState(null)
   const [recuperacao, setRecuperacao] = useState(false)
+  const [drive, setDrive] = useState({ conectado: false })
+  const carregarDrive = useCallback(async () => setDrive(await driveStatus()), [])
   const toastTimer = useRef(null)
 
   const avisar = useCallback((msg, tipo = 'ok') => {
@@ -66,6 +69,7 @@ export function AppProvider({ children }) {
     if (!profile || profile.semPerfil || !profile.ativo) return
     // limpeza de inscrições expiradas (equivalente ao cancelarInscricoesExpiradas do sistema antigo)
     supabase.rpc('cancelar_inscricoes_expiradas').then(() => recarregar())
+    carregarDrive()
 
     // tempo real: conferências/retiradas feitas em outros aparelhos
     const canal = supabase
@@ -82,7 +86,7 @@ export function AppProvider({ children }) {
       })
       .subscribe()
     return () => { supabase.removeChannel(canal) }
-  }, [profile, recarregar])
+  }, [profile, recarregar, carregarDrive])
 
   const aplicarInscricao = (r) =>
     setInscricoes((atual) => {
@@ -214,7 +218,7 @@ export function AppProvider({ children }) {
     eventos, pessoas, inscricoes, carregando, recarregar,
     eventoPorId, pessoaPorId, inscPorPessoa, inscPorEvento, eventosAtivosDaPessoa, eventosDisponiveis,
     salvarPessoa, excluirPessoa, marcar, salvarEvento, excluirEvento,
-    toast, avisar, recuperacao, setRecuperacao,
+    toast, avisar, recuperacao, setRecuperacao, drive, carregarDrive,
   }
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>
 }
